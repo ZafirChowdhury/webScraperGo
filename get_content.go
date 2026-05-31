@@ -30,7 +30,7 @@ func getFirstParagraphFromHTML(html string) string {
 	}
 
 	main := doc.Find("main").First()
-	p := main.Find("p").Text()
+	p := main.Find("p").First().Text()
 	if p == "" {
 		p = doc.Find("p").First().Text()
 	}
