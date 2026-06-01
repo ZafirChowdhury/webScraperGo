@@ -13,6 +13,10 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 		cfg.wg.Done()
 	}()
 
+	if cfg.pagesLen() >= cfg.maxPages {
+		return
+	}
+
 	currURL, err := url.Parse(rawCurrentURL)
 	if err != nil {
 		log.Println(err.Error())
