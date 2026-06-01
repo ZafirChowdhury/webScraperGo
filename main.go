@@ -18,7 +18,21 @@ func main() {
 	}
 
 	baseURL := os.Args[1]
-	fmt.Printf("starting crawl of: %s\n", baseURL)
 
-	crawlPage(baseURL, "", make(map[string]int))
+	const maxConcurrency = 3
+	cfg, err := configure(baseURL, maxConcurrency)
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
+
+	fmt.Printf("starting crawl of: %s...\n", baseURL)
+
+	cfg.wg.Add(1)
+	go cfg.crawlPage(baseURL)
+	cfg.wg.Wait()
+
+	for normalizedURL := range cfg.pages {
+		fmt.Printf("found: %s\n", normalizedURL)
+	}
 }

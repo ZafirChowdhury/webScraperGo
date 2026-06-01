@@ -6,10 +6,12 @@ import (
 	"net/url"
 )
 
-func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int) {
-	if rawCurrentURL == "" {
-		rawCurrentURL = rawBaseURL
-	}
+func (cfg *config) crawlPage(rawCurrentURL string) {
+	cfg.concurrencyControl <- struct{}{}
+	defer func() {
+		<-cfg.concurrencyControl
+		cfg.wg.Done()
+	}()
 
 	currURL, err := url.Parse(rawCurrentURL)
 	if err != nil {
@@ -17,49 +19,34 @@ func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int) {
 		return
 	}
 
-	baseURL, err := url.Parse(rawBaseURL)
+	if currURL.Hostname() != cfg.baseURL.Hostname() {
+		fmt.Printf("Skiping url %s as it is in diffrent domain\n", rawCurrentURL)
+		return
+	}
+
+	normalizedURL, err := normalizeURL(rawCurrentURL)
 	if err != nil {
 		log.Println(err.Error())
 		return
 	}
 
-	if currURL.Hostname() != baseURL.Hostname() {
-		log.Printf("Skiping url %s as it is in diffrent domain\n", rawCurrentURL)
+	isFirst := cfg.addPageVisit(normalizedURL)
+	if !isFirst {
 		return
 	}
 
-	normalURL, err := normalizeURL(rawCurrentURL)
+	fmt.Printf("crawling %s\n", rawCurrentURL)
+	htmlBody, err := getHTML(rawCurrentURL)
 	if err != nil {
 		log.Println(err.Error())
 		return
 	}
 
-	_, ok := pages[normalURL]
-	if ok {
-		pages[normalURL]++
-		return
-	}
+	pageData := extractPageData(htmlBody, rawCurrentURL)
+	cfg.setPageData(normalizedURL, pageData)
 
-	pages[normalURL] = 1
-
-	fmt.Printf("Crawling %s\n", normalURL)
-	html, err := getHTML(rawCurrentURL)
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	pageData := extractPageData(html, rawCurrentURL)
-	fmt.Println(pageData.String())
-
-	// recurcive crawl
-	urls, err := getURLsFromHTML(html, baseURL)
-	if err != nil {
-		log.Println(err.Error())
-		return
-	}
-
-	for _, u := range urls {
-		crawlPage(rawBaseURL, u, pages)
+	for _, nextURL := range pageData.OutgoingLinks {
+		cfg.wg.Add(1)
+		go cfg.crawlPage(nextURL)
 	}
 }
